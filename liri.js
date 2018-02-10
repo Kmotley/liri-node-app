@@ -1,208 +1,153 @@
-var fs = require("fs");							//NPM package for reading and writing files
+var request = require("request");
+var inquirer = require("inquirer");
+var Twitter = require("twitter");
+var Spotify = require('node-spotify-api');
+var fs = require("fs");
+var keys = require("./keys.js");
 
-var keys = require("./keys.js");				//Twitter keys and access tokens
-var Twitter = require("twitter");				//NPM package for twitter
-var client = new Twitter(keys.twitterKeys);		//New instance of a twitter client
+var command = process.argv[2];
+var txtLogCommand = "\rCommand: ";
 
-var request = require("request");				//NPM package for making ajax-like calls
-
-var spotify = require("spotify");				//NPM package for spotify
-
-var userCommand = process.argv[2];
-var artName = process.argv[3];
-
-doNext(userCommand,artName);
-
-function doNext(uC, aN){
-	switch(uC){
-	case 'my-tweets':
-		fetchTwitter();
-	break;
-
-	case "spotify-this-song":
-		fetchSpotify(aN);
-	break;
-
-	case "movie-this":
-		fetchOMDB(aN);
-	break;
-
-	case "do-what-it-says":
-		fetchRandom();
-	break;
-
-	default:
-	break;
-	}
+for (var i = 2; i < process.argv.length; i++) {
+    txtLogCommand += process.argv[i] + " "; 
 }
 
-function fetchTwitter(){
-	var tweetsLength;
+//Based on command function is selected
+if (command === 'my-tweets'){
+    getTweets();
+    logCommand(txtLogCommand);
+    }
+else if (command === 'spotify-this-song'){
+    getSpotify();
+    logCommand(txtLogCommand);
+    }
+else if (command === 'movie-this'){
+    getOMDB();
+    logCommand(txtLogCommand);
+    }
+else if (command === 'do-what-it-says'){
+    doWhatItSays();
+    logCommand(txtLogCommand);
+    }
 
-	//From twitter's NPM documentation, grab the most recent tweets
-	var params = {screen_name: 'MichelleHett'};
-	client.get('statuses/user_timeline', function(error, tweets, response) {
-		if(error) throw error;
+else {console.log("I'm sorry. I don't recognize that command. Please try again.");}
 
-		//Loop through the number of tweets that were returned to get the number of tweets returned.
-		//If the number of tweets exceeds 20, make it 20.
-		//Then loop through the length of tweets and return the tweets date and text.
-		tweetsLength = 0;
+//my-tweets
+function getTweets(){
+    var twitterKeys = keys.twitterKeys;
 
-		for(var i=0; i<tweets.length; i++){
-			tweetsLength ++;
-		}
-		if (tweetsLength > 20){
-			tweetsLength = 20;
-		}
-		for (var i=0; i<tweetsLength; i++){
-			console.log("Tweet " + (i+1) + " created on: " + tweets[i].created_at);
-			console.log("Tweet " + (i+1) + " text: " + tweets[i].text);
-			console.log("--------------------------------------------------------------");
+    var client = new Twitter({
+    consumer_key: twitterKeys.consumer_key,
+    consumer_secret: twitterKeys.consumer_secret,
+    access_token_key: twitterKeys.access_token_key,
+    access_token_secret: twitterKeys.access_token_secret
+    })
 
-			appendFile("Tweet " + (i+1) + " created on: " + tweets[i].created_at);
-			appendFile("Tweet " + (i+1) + " text: " + tweets[i].text);
-			appendFile("--------------------------------------------------------------");
-		}
-	});
+    var params = {screen_name: 'cgs_robot'};
+
+    client.get('statuses/user_timeline', params, function(error, tweets, response) {
+    console.log("--------------------------");
+    console.log("+++++++TWITTER FEED+++++++");
+    console.log("--------------------------");
+    if (!error) {
+        for (var i = 0; i < 20; i++) {
+            console.log((i+1) + ". " + tweets[i].text + " (Posted: " + tweets[i].created_at + ")");    
+        }
+    }
+    console.log("--------------------------");
+    })
 }
 
-function upperCase (string){
-	//Capitalize first letter of each part of song name
-	return string.toUpperCase();
+//spotify-this-song
+function getSpotify(songName){
+
+    if (process.argv[3] !=null){
+        songName = process.argv[3];
+    }
+    else if (songName === undefined) {
+        songName = "ace sign";
+    }
+
+var spotifyKeys = keys.spotifyKeys;    
+ 
+var spotify = new Spotify({
+  id: spotifyKeys.id,
+  secret: spotifyKeys.secret,
+});
+ 
+spotify
+  .search({ type: 'track', query: songName, limit: 3})
+  .then(function(response) {
+    console.log("--------------------------");
+    console.log("++SPOTIFY SEARCH RESULTS++");
+    for (var i = 0; i < (response.tracks.items.length); i++) {
+        console.log("--------------------------");
+        for (var j = 0; j < response.tracks.items[i].artists.length; j++) {
+            if (j === 0){
+                var artistList = response.tracks.items[i].artists[j].name;
+            }
+            else {artistList += ", " + response.tracks.items[i].artists[j].name;}    
+        }
+        console.log("Artist(s): " + artistList);
+        console.log("Song Name: " + response.tracks.items[i].name);
+        console.log("Album Name: " + response.tracks.items[i].album.name);
+        console.log("Preview Link: " + response.tracks.items[i].preview_url);
+    }
+  })
+  .catch(function(err) {
+    console.log(err);
+  });
 }
-function titleCase(string){
-	var firstLetter = /(^|\s)[a-z]/g;
-	return string.replace(firstLetter, upperCase);
-}
+//movie-this
+function getOMDB(){
+    if (process.argv[3] === undefined) {
+        movieName = "Mr. Nobody";
+        }
+    else {var movieName = process.argv[3];}
 
-function fetchSpotify(song){
-	var songName;
+    var queryUrl = "http://www.omdbapi.com/?t=" + movieName + "&y=&plot=short&apikey=40e9cece";
 
-	//If a song WAS chosen, make it title case so spotify can find it in its database
-	//If a song was not typed it, default to the song The Sign
-	if (song != null){
-		songName = titleCase(song);
-	}
-	else {
-		songName = "The Sign";
-	}
-	console.log("Searching for: " + songName);
-	console.log("------------------------");
+    if (movieName === "") {
+    movieName = "Mr. Nobody";
+    } 
 
-	appendFile("Searching for: " + songName);
-	appendFile("---------------------------------");
-
-	//Get data from spotify API based on the query term (song name) typed in by the user
-	spotify.search({ type: 'track', query: songName}, function(err, data) {
-	    if ( err ) {
-	        console.log('Error occurred: ' + err);
-	        return;
-	    }
-
-	    var matchedTracks = [];
-	    var dataItems = data.tracks.items;
-
-	    for (var i=0; i<20; i++){
-	    	if (data.tracks.items[i].name == songName){
-	    		matchedTracks.push(i);
-	    	}
-	    }
-
-	    console.log(matchedTracks.length + " tracks found that match your query.");
-	    appendFile(matchedTracks.length + " tracks found that match your query.");
-
-	    if (matchedTracks.length > 0){
-    		console.log("Track: " + dataItems[matchedTracks[0]].name);	
-			console.log("Artist: " + dataItems[matchedTracks[0]].artists[0].name);
-			console.log("Album: " + dataItems[matchedTracks[0]].album.name);
-			console.log("Spotify link: " + dataItems[matchedTracks[0]].external_urls.spotify);
-
-			appendFile("Track: " + dataItems[matchedTracks[0]].name);
-			appendFile("Artist: " + dataItems[matchedTracks[0]].artists[0].name);
-			appendFile("Album: " + dataItems[matchedTracks[0]].album.name);
-			appendFile("Spotify link: " + dataItems[matchedTracks[0]].external_urls.spotify);
-		}
-		else if (matchedTracks.length == 0){
-			console.log("Sorry, but spotify does not contain that song in their database :(");
-			appendFile("Sorry, but spotify does not contain that song in their database :(");
-		}
-		
-	});
-}
-
-function fetchOMDB(movieName){
-	//If a movie was not typed it, default to the movie Mr. Nobody
-	if (artName == null){
-		movieName = "Mr. Nobody";
-	}
-
-	var requestURL = "http://www.omdbapi.com/?t=" + movieName + "&tomatoes=true&y=&plot=short&r=json";
-
-	request(requestURL, function (error, response, data){
-
-		//200 response means that the page has been found and a response was received.
-		if (!error && response.statusCode == 200){
-			console.log("Everything working fine.");
-		}
-		console.log("---------------------------------------------");
-		console.log("The movie's title is: " + JSON.parse(data)["Title"]);
-		console.log("The movie's release year is: " + JSON.parse(data)["Year"]);		
-		console.log("The movie's rating is: " + JSON.parse(data)["imdbRating"]);
-		console.log("The movie's was produced in: " + JSON.parse(data)["Country"]);
-		console.log("The movie's language is: " + JSON.parse(data)["Language"]);
-		console.log("The movie's plot: " + JSON.parse(data)["Plot"]);
-		console.log("The movie's actors: " + JSON.parse(data)["Actors"]);
-		console.log("The movie's Rotten Tomatoes Rating: " + JSON.parse(data)["tomatoRating"]);
-		console.log("The movie's Rotten Tomatoes URL: " + JSON.parse(data)["tomatoURL"]);
-
-		appendFile("---------------------------------------------");
-		appendFile("The movie's title is: " + JSON.parse(data)["Title"]);
-		appendFile("The movie's release year is: " + JSON.parse(data)["Year"]);		
-		appendFile("The movie's rating is: " + JSON.parse(data)["imdbRating"]);
-		appendFile("The movie's was produced in: " + JSON.parse(data)["Country"]);
-		appendFile("The movie's language is: " + JSON.parse(data)["Language"]);
-		appendFile("The movie's plot: " + JSON.parse(data)["Plot"]);
-		appendFile("The movie's actors: " + JSON.parse(data)["Actors"]);
-		appendFile("The movie's Rotten Tomatoes Rating: " + JSON.parse(data)["tomatoRating"]);
-		appendFile("The movie's Rotten Tomatoes URL: " + JSON.parse(data)["tomatoURL"]);											
-	});
+    request(queryUrl, function(error, response, body){
+        if (!error && response.statusCode === 200) {
+        console.log("--------------------------");
+        console.log("+++MOVIE SEARCH RESULTS+++");
+        console.log("--------------------------");
+        console.log("Title: " + JSON.parse(body).Title);
+        console.log("Year: " + JSON.parse(body).Year);
+        console.log("IMDB Rating: " + JSON.parse(body).imdbRating);
+        console.log("Rotten Tomatoes Rating: " + JSON.parse(body).Ratings[2].Value);
+        console.log("Country: " + JSON.parse(body).Country);
+        console.log("Language: " + JSON.parse(body).Language);
+        console.log("Plot: " + JSON.parse(body).Plot);
+        console.log("Actors: " + JSON.parse(body).Actors);
+        console.log("--------------------------");
+        }
+    })
 }
 
-function fetchRandom(){
-	//LIRI will take the text inside of random.txt and then use it to call one of LIRI's commands.
-	//Runs `spotify-this-song` for "I Want it That Way," as follows the text in `random.txt`.
-	fs.readFile("random.txt", 'utf8', function(err, data){
+// do-what-it-says
 
-		// console.log(data);
+function doWhatItSays(){
 
-		//Creating an array from a string with split()
-		//Every comma, push the element into the array
-		var dataArr = data.split(',');
+    fs.readFile("random.txt", "utf8", function(error, data){
+   // console.log(data);
+    var dataArr = data.split(",");
+    var commandInternal = dataArr[0];
+    var songName = dataArr[1];
 
-		// console.log(dataArr);
-
-		var randomUserCommand = dataArr[0];
-		var randomArtName = dataArr[1];
-
-		console.log("You requested to " + "<" + randomUserCommand + "> with " + randomArtName);
-		appendFile("You requested to " + "<" + randomUserCommand + "> with " + randomArtName);
-
-		//Remove the quotes before making a request
-		randomArtName = randomArtName.replace(/^"(.*)"$/, '$1');
-
-		doNext(randomUserCommand, randomArtName);
-	});
+    getSpotify(songName);
+    
+    })
 }
 
-function appendFile(dataToAppend){
-
-	//Output all that happens into a log.txt file
-	fs.appendFile("log.txt", dataToAppend , function(err){
-
-		//If an error happens while trying to write to the file
-		if (err){
-			return console.log(err);
-		}
-	});
-}
+function logCommand(txtLogCommand){
+    fs.appendFile("log.txt", txtLogCommand, function(err) {
+        if (err) {
+            console.log(err);
+        };
+    });
+};
